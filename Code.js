@@ -1,44 +1,46 @@
 /*************** CONFIGURATION GLOBALE ***************/
+// Objet de configuration contenant les noms des feuilles, indices des colonnes,
+// statuts valides, icônes associées aux statuts, paramètres de trigger, etc.
 const CONFIG = {
   FEUILLES: {
-    TACHES: 'Tâches sample',
-    HISTORIQUE: 'Historique',
+    TACHES: 'Tâches sample',       // Nom de la feuille principale des tâches
+    HISTORIQUE: 'Historique',      // Nom de la feuille d'historique des tâches
   },
   COLONNES: {
-    PROJET_ID: 1,
-    PROJET: 2,
-    ASSIGNE: 3,
-    EMAIL: 4,
-    DATE_PROJET: 5,
-    STATUT: 6,
-    TACHE: 7,
-    TEMPS_ECHEANCE: 8,
+    PROJET_ID: 1,       // Colonne pour l'ID du projet
+    PROJET: 2,          // Colonne pour le nom du projet
+    ASSIGNE: 3,         // Colonne pour la personne assignée
+    EMAIL: 4,           // Colonne pour l'email de la personne assignée
+    DATE_PROJET: 5,     // Colonne pour la date d'échéance du projet
+    STATUT: 6,          // Colonne pour le statut de la tâche
+    TACHE: 7,           // Colonne pour le nom de la tâche
+    TEMPS_ECHEANCE: 8,  // Colonne pour l'heure limite de la tâche
   },
-  STATUTS_VALIDES: ['À faire', 'En cours', 'Terminé'],
-  STATUTS_ICONS: {
+  STATUTS_VALIDES: ['À faire', 'En cours', 'Terminé'],  // Statuts valides
+  STATUTS_ICONS: {   // Icônes associées à différents statuts ou alertes
     ATTENTE: '~',
     TERMINE: '✅🔕',
     ECHEANCE_PASSEE: '⌛❌',
     A_RAPPELER: '☑️ à rappeler',
     TEMPS_DEPASSE: ' ⏰ Temps dépassé'
   },
-  TRIGGER_HORAIRE: 9, // 9h du matin
-  MAX_EMAILS: 50,
-  HEADERS_TACHES: [
+  TRIGGER_HORAIRE: 9,  // Heure du trigger journalier (9h)
+  MAX_EMAILS: 50,      // Nombre maximum d'emails envoyés par exécution
+  HEADERS_TACHES: [    // Entêtes utilisées dans la feuille tâches
     "ProjetID", "Projet", "Assigné à", "Email", "Date d’échéance (Projet)", 
     "Statut", "Tâche", "Temps d’échéance (Tâche)"
   ],
-  HEADERS_HTMLTBL: [
+  HEADERS_HTMLTBL: [   // Entêtes pour le tableau HTML affiché dans le dialogue
     "Projet ID", "Projet", "Assigné à", "Email", "Date d’échéance (Projet)", "Statut", "Ligne",
     "Rappel", "Tâche", "Temps d’échéance (Tâche)"
   ],
-  HEADERS_HISTORIQUE: [
+  HEADERS_HISTORIQUE: [  // Entêtes pour la feuille historique
     "Projet ID", "Projet", "Tâche", "Assigné à", "Email", "Date d’échéance (Projet)", "Date et Heure de Création"
   ],
-  LARGEURS_TACHES: [90, 200, 100, 170, 170, 60, 200, 170],
-  LARGEURS_HTMLTBL: [90, 200, 100, 170, 170, 60, 50, 60, 200, 170],
-  LARGEURS_HISTORIQUE: [90, 200, 200, 100, 170, 170, 200],
-  UI_MENU_LABELS: {
+  LARGEURS_TACHES: [90, 200, 100, 170, 170, 60, 200, 170],    // Largeurs colonnes feuille tâches
+  LARGEURS_HTMLTBL: [90, 200, 100, 170, 170, 60, 50, 60, 200, 170], // Largeurs colonnes tableau HTML
+  LARGEURS_HISTORIQUE: [90, 200, 200, 100, 170, 170, 200],    // Largeurs colonnes feuille historique
+  UI_MENU_LABELS: {    // Labels du menu UI personnalisé
     MENU: "📋 Menu",
     SYNC_RAPPELS: "⏳ Synchroniser + Rappels",
     ACTIVER_RAPPEL: "📅 Activer rappel automatique",
@@ -51,19 +53,22 @@ const CONFIG = {
 };
 
 /*************** PROPRIÉTÉS (PropertiesService) ***************/
+// Accéder aux propriétés script persistantes
 function getProperties() {
   return PropertiesService.getScriptProperties();
 }
-
+// Enregistrer une propriété clé-valeur
 function setProperty(key, value) {
   getProperties().setProperty(key, value);
 }
-
+// Récupérer une propriété par clé
 function getProperty(key) {
   return getProperties().getProperty(key);
 }
 
 /*************** MENU DÉMARRAGE ***************/
+// Fonction appelée à l'ouverture du fichier Google Sheets
+// Crée un menu personnalisé avec différentes actions liées aux tâches
 function onOpen() {
   const ui = SpreadsheetApp.getUi();
   ui.createMenu(CONFIG.UI_MENU_LABELS.MENU)
@@ -76,23 +81,27 @@ function onOpen() {
     .addItem(CONFIG.UI_MENU_LABELS.RESET_HISTORIQUE, "resetHistorique")
     .addToUi();
 
-  creationEntetesTachesSample();
-  installerTrigger();
-  syncEtRappels();
+  creationEntetesTachesSample(); // Crée les entêtes dans la feuille tâches si nécessaire
+  installerTrigger();             // Installe le déclencheur horaire quotidien
+  syncEtRappels();               // Synchronise les tâches et envoie les rappels
 }
 
 /*************** UTILITAIRES ***************/
+// Aligne à droite les colonnes spécifiées dans une feuille donnée, à partir de la 2ème ligne (hors entête)
 function alignerColonnesADroiteParFeuille(nomFeuille, colonnes) {
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(nomFeuille);
   if (!feuille) return;
   const lastRow = feuille.getLastRow();
-  if (lastRow < 2) return;
+  if (lastRow < 2) return; // Pas de données à aligner
+
   colonnes.forEach(col => {
+    // Aligne horizontalement à droite sur les cellules données
     feuille.getRange(2, col, lastRow - 1).setHorizontalAlignment("right");
   });
 }
 
 /*************** RESET HISTORIQUE ***************/
+// Vide tout le contenu de la feuille Historique à partir de la 2ème ligne
 function resetHistorique() {
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEUILLES.HISTORIQUE);
   if (!feuille) {
@@ -107,34 +116,42 @@ function resetHistorique() {
 }
 
 /*************** MARQUAGE DES STATUTS ***************/
+// Ces fonctions modifient le statut des lignes sélectionnées dans la feuille active
 function marquerCommeTermine() { mettreAJourStatut("Terminé"); }
 function marquerCommeEnCours() { mettreAJourStatut("En cours"); }
 function marquerCommeAFaire() { mettreAJourStatut("À faire"); }
 
+// Met à jour le statut des lignes sélectionnées avec le statut donné en paramètre
 function mettreAJourStatut(nouveauStatut) {
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
   const range = feuille.getActiveRange();
   if (!range) return;
   const startRow = range.getRow();
   const numRows = range.getNumRows();
+
   for (let i = 0; i < numRows; i++) {
     feuille.getRange(startRow + i, CONFIG.COLONNES.STATUT).setValue(nouveauStatut);
   }
 }
 
 /*************** SYNCHRONISATION + RAPPELS ***************/
+// Synchronise les données, prépare un tableau HTML et envoie des emails de rappel
 function syncEtRappels() {
   try {
+    // Aligne certaines colonnes à droite dans la feuille tâches
     alignerColonnesADroiteParFeuille(CONFIG.FEUILLES.TACHES, [1, 2, 3, 4, 5, 6, 7]);
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const src = ss.getSheetByName(CONFIG.FEUILLES.TACHES);
     if (!src) return;
+
+    // Date du jour à minuit (pour comparer uniquement dates sans heures)
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
-    const srcData = src.getDataRange().getValues();
-    const emails = [];
-    const rows = [];
+    const srcData = src.getDataRange().getValues(); // Récupère toutes les données
+    const emails = [];  // Liste des emails à envoyer
+    const rows = [];    // Données formatées pour affichage HTML
 
     for (let i = 1; i < srcData.length; i++) {
       const row = srcData[i];
@@ -147,8 +164,10 @@ function syncEtRappels() {
       const tache = row[CONFIG.COLONNES.TACHE - 1];
       const tempsEcheance = row[CONFIG.COLONNES.TEMPS_ECHEANCE - 1];
 
+      // Si ID projet absent, génère un ID temporaire avec un préfixe "P-"
       const projetID = projetIDCell || "P-" + i.toString().padStart(4, "0");
 
+      // Vérifie que les champs essentiels sont bien remplis et valides
       if (!projet || !assigne || !email || !dateProjet || !statut) continue;
       if (!/@/.test(email.trim())) continue;
 
@@ -156,11 +175,15 @@ function syncEtRappels() {
       if (isNaN(parsedDate.getTime())) continue;
       if (!CONFIG.STATUTS_VALIDES.includes(statut)) continue;
 
+      // Calcul différence en jours entre dateProjet et aujourd'hui
       const diff = Math.floor((parsedDate - today) / 86400000);
+
+      // Initialisation de l'icône de rappel et autres variables
       let rappel = CONFIG.STATUTS_ICONS.ATTENTE;
       let tempsDepasse = false;
       let heureFinale = '';
 
+      // Formatage de l'heure limite si spécifiée
       if (tempsEcheance instanceof Date) {
         const maintenant = new Date();
         const heureTotale = new Date(maintenant.getTime());
@@ -172,11 +195,14 @@ function syncEtRappels() {
         rappel = CONFIG.STATUTS_ICONS.TERMINE;
       } else {
         if (diff < 0) {
+          // Date dépassée
           rappel = CONFIG.STATUTS_ICONS.ECHEANCE_PASSEE;
         } else if (diff <= 2) {
+          // Rappel à envoyer pour échéance proche
           rappel = CONFIG.STATUTS_ICONS.A_RAPPELER;
           emails.push({ email: email.trim(), assigne, tache: projet, date: dateProjet, tempsDepasse: false });
         }
+        // Si échéance temps dépassé dans la journée même
         if (tempsEcheance instanceof Date && diff === 0) {
           const maintenant = new Date();
           const heureTache = new Date();
@@ -189,9 +215,11 @@ function syncEtRappels() {
         }
       }
 
+      // Prépare les données formatées pour affichage HTML
       rows.push([projetID, projet, assigne, email, dateProjet, statut, i + 1, rappel, tache, heureFinale]);
     }
 
+    // Envoie les emails de rappel, jusqu'au maximum configuré
     emails.slice(0, CONFIG.MAX_EMAILS).forEach(e => {
       try {
         let message = `Bonjour ${e.assigne},\nVotre tâche “${e.tache}” est prévue pour le ${new Date(e.date).toLocaleDateString()}.`;
@@ -204,8 +232,8 @@ function syncEtRappels() {
       }
     });
 
-    afficherTableauHTML(CONFIG.HEADERS_HTMLTBL, rows);
-    enregistrerProjetsEtTaches();
+    afficherTableauHTML(CONFIG.HEADERS_HTMLTBL, rows); // Affiche un tableau HTML dans une fenêtre modale
+    enregistrerProjetsEtTaches(); // Synchronise les données dans la feuille historique
 
   } catch (e) {
     logErreur("Erreur dans syncEtRappels()", e);
@@ -213,12 +241,16 @@ function syncEtRappels() {
 }
 
 /*************** INSTALLER TRIGGER ***************/
+// Supprime les triggers existants liés à syncEtRappels puis crée un trigger horaire journalier
 function installerTrigger() {
   const triggers = ScriptApp.getProjectTriggers();
+
+  // Supprime les triggers syncEtRappels existants pour éviter doublons
   triggers.forEach(t => {
     if (t.getHandlerFunction() === 'syncEtRappels') ScriptApp.deleteTrigger(t);
   });
 
+  // Crée un nouveau trigger journalier à l'heure définie dans la config
   ScriptApp.newTrigger('syncEtRappels')
     .timeBased()
     .everyDays(1)
@@ -227,18 +259,21 @@ function installerTrigger() {
 }
 
 /*************** RÉINITIALISATION TÂCHES ***************/
+// Efface le contenu des tâches à partir de la 2e ligne, colonnes 1 à TEMPS_ECHEANCE
 function resetTaches() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEUILLES.TACHES);
   if (sheet) sheet.getRange(2, 1, sheet.getLastRow() - 1, CONFIG.COLONNES.TEMPS_ECHEANCE).clearContent();
 }
 
 /*************** LOGGING D’ERREURS ***************/
+// Affiche dans le log une erreur avec un message personnalisé
 function logErreur(msg, e) {
   const message = e?.message || String(e) || 'Erreur inconnue';
   Logger.log(`[ERREUR] ${msg} : ${message}`);
 }
 
 /*************** INITIALISATION FEUILLE TÂCHES ***************/
+// Crée les entêtes et configure la mise en forme de la feuille "Tâches sample"
 function creationEntetesTachesSample() {
   const feuille = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEUILLES.TACHES);
   if (!feuille) {
@@ -246,15 +281,20 @@ function creationEntetesTachesSample() {
     return;
   }
 
+  // Définit les entêtes dans la 1ère ligne
   feuille.getRange(1, 1, 1, CONFIG.HEADERS_TACHES.length).setValues([CONFIG.HEADERS_TACHES]);
 
+  // Définit les largeurs de colonnes
   CONFIG.LARGEURS_TACHES.forEach((width, idx) => {
     feuille.setColumnWidth(idx + 1, width);
   });
 
   const totalRows = feuille.getMaxRows();
+
+  // Active le retour à la ligne dans toutes les cellules de la table
   feuille.getRange(1, 1, totalRows, CONFIG.HEADERS_TACHES.length).setWrap(true);
 
+  // Mise en forme des entêtes : police, alignement, gras, couleur de fond
   feuille.getRange(1, 1, 1, CONFIG.HEADERS_TACHES.length)
     .setFontFamily("Georgia")
     .setHorizontalAlignment("center")
@@ -264,6 +304,7 @@ function creationEntetesTachesSample() {
 }
 
 /*************** AFFICHAGE TABLEAU HTML ***************/
+// Affiche un tableau HTML interactif dans une fenêtre modale du tableur avec recherche et tri
 function afficherTableauHTML(headers, rows) {
   if (!headers || !Array.isArray(headers)) {
     SpreadsheetApp.getUi().alert("Erreur : les en-têtes sont manquants ou invalides.");
@@ -274,16 +315,18 @@ function afficherTableauHTML(headers, rows) {
     return;
   }
 
-    // ✅ Formater la colonne date (index 4 car Projet ID est en index 0)
+  // Formate la date dans la colonne 4 (index 4 dans rows) au format français
   const timeZone = Session.getScriptTimeZone();
   rows = rows.map(row => {
     const newRow = [...row];
     const dateProjet = row[4];
-    if (dateProjet instanceof Date) { newRow[4] = Utilities.formatDate(dateProjet, timeZone, "dd/MM/yyyy");
+    if (dateProjet instanceof Date) {
+      newRow[4] = Utilities.formatDate(dateProjet, timeZone, "dd/MM/yyyy");
     }
-      return newRow;
-    });
+    return newRow;
+  });
 
+  // Génération du code HTML complet pour le tableau
   let html = `
     <html>
     <head>
@@ -318,7 +361,7 @@ function afficherTableauHTML(headers, rows) {
       </table>
 
       <script>
-        // Recherche en direct
+        // Recherche en temps réel dans le tableau
         document.getElementById('searchInput').addEventListener('keyup', function () {
           const filter = this.value.toLowerCase();
           const rows = document.querySelectorAll('#tachesTable tbody tr');
@@ -328,7 +371,7 @@ function afficherTableauHTML(headers, rows) {
           });
         });
 
-        // Tri des colonnes
+        // Fonction de tri par colonne (toggle asc/desc)
         function sortTable(th) {
           const table = th.closest('table');
           const tbody = table.querySelector('tbody');
@@ -351,6 +394,7 @@ function afficherTableauHTML(headers, rows) {
     </html>
   `;
 
+  // Affiche la fenêtre modale avec le tableau
   const page = HtmlService.createHtmlOutput(html)
     .setWidth(1200)
     .setHeight(600);
@@ -358,6 +402,7 @@ function afficherTableauHTML(headers, rows) {
 }
 
 /*************** ENREGISTREMENT DES PROJETS ET TÂCHES ***************/
+// Synchronise la feuille historique avec les données actuelles de la feuille tâches
 function enregistrerProjetsEtTaches() {
   const feuilleSource = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(CONFIG.FEUILLES.TACHES);
   if (!feuilleSource) return;
@@ -365,16 +410,17 @@ function enregistrerProjetsEtTaches() {
   const donneesSource = feuilleSource.getDataRange().getValues();
   if (donneesSource.length < 2) return;
 
+  // Vérifie ou crée la feuille historique
   const feuilleHistorique = verifierOuCreerFeuilleHistorique();
   const donneesHistorique = feuilleHistorique.getDataRange().getValues();
   const timeZone = Session.getScriptTimeZone();
   const horodatageActuel = Utilities.formatDate(new Date(), timeZone, "dd-MM-yyyy HH:mm");
 
+  // Création d'un dictionnaire des projets+tâches actuels dans la feuille tâches
   const projetsSource = {};
   for (let i = 1; i < donneesSource.length; i++) {
     const ligne = donneesSource[i];
     const [projetID, projet, assigneA, email, dateProjet, , tache] = ligne;
-
     if (!projetID || !projet || !tache || !email || !dateProjet) continue;
 
     const dateProjetFormatee = dateProjet instanceof Date
@@ -390,10 +436,11 @@ function enregistrerProjetsEtTaches() {
       assigneA,
       email,
       dateProjetFormatee,
-      horodatageActuel
+      horodatageActuel  // Date et heure de synchronisation actuelle (modifiée plus bas si besoin)
     ];
   }
 
+  // Création d'un dictionnaire des projets+tâches existants dans la feuille historique
   const projetsHistorique = {};
   for (let i = 1; i < donneesHistorique.length; i++) {
     const ligne = donneesHistorique[i];
@@ -404,6 +451,7 @@ function enregistrerProjetsEtTaches() {
     projetsHistorique[cleComposite] = { index: i + 1, dateCreation };
   }
 
+  // Recherche des lignes à supprimer dans historique car plus dans tâches
   let lignesASupprimer = [];
   Object.entries(projetsHistorique).forEach(([cle, info]) => {
     if (!projetsSource.hasOwnProperty(cle)) {
@@ -411,26 +459,30 @@ function enregistrerProjetsEtTaches() {
     }
   });
 
+  // Mise à jour ou ajout des lignes dans la feuille historique
   Object.entries(projetsSource).forEach(([cle, valeurs]) => {
     if (projetsHistorique.hasOwnProperty(cle)) {
       const ligneIndex = projetsHistorique[cle].index;
       const ancienneDate = projetsHistorique[cle].dateCreation;
 
-      // Conserver la date et heure de création sauf si Projet ID ou Projet ont changé
+      // Conserve la date de création historique (ne modifie pas à chaque sync)
       valeurs[6] = ancienneDate;
 
       feuilleHistorique.getRange(ligneIndex, 1, 1, valeurs.length).setValues([valeurs]);
     } else {
+      // Nouvelle entrée : ajout à la fin
       feuilleHistorique.appendRow(valeurs);
     }
   });
 
+  // Supprime les lignes qui ne sont plus présentes dans la source
   lignesASupprimer.sort((a, b) => b - a).forEach(index => {
     feuilleHistorique.deleteRow(index);
   });
 }
 
 /*************** VERIFICATION / CREATION FEUILLE HISTORIQUE ***************/
+// Vérifie si la feuille historique existe, sinon la crée et configure la mise en forme
 function verifierOuCreerFeuilleHistorique() {
   const feuilleNom = CONFIG.FEUILLES.HISTORIQUE;
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -442,16 +494,21 @@ function verifierOuCreerFeuilleHistorique() {
 
   const headers = CONFIG.HEADERS_HISTORIQUE;
 
+  // Définit les entêtes dans la 1ère ligne
   feuille.getRange(1, 1, 1, headers.length).setValues([headers]);
 
+  // Définit les largeurs de colonnes
   const largeurs = CONFIG.LARGEURS_HISTORIQUE;
   for (let i = 0; i < largeurs.length; i++) {
     feuille.setColumnWidth(i + 1, largeurs[i]);
   }
 
   const totalRows = feuille.getMaxRows();
+
+  // Active le retour à la ligne dans toutes les cellules de la table
   feuille.getRange(1, 1, totalRows, headers.length).setWrap(true);
 
+  // Mise en forme des entêtes : police, alignement, gras, couleur de fond
   feuille.getRange(1, 1, 1, headers.length)
     .setFontFamily("Georgia")
     .setHorizontalAlignment("center")
@@ -459,6 +516,7 @@ function verifierOuCreerFeuilleHistorique() {
     .setFontWeight("bold")
     .setBackground("#F76363");
 
+  // Aligne à droite certaines colonnes
   alignerColonnesADroiteParFeuille(feuilleNom, [1, 2, 3, 4, 5]);
 
   return feuille;
