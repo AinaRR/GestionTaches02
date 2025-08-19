@@ -1,4 +1,4 @@
-/*************** CONFIGURATION GLOBALE ***************/
+/**************************** CONFIGURATION GLOBALE ****************************/
 // Objet de configuration contenant les noms des feuilles, indices des colonnes,
 // statuts valides, icônes associées aux statuts, paramètres de trigger, etc.
 const CONFIG = {
@@ -35,11 +35,11 @@ const CONFIG = {
     "Rappel", "Tâche", "Temps d’échéance (Tâche)"
   ],
   HEADERS_HISTORIQUE: [  // Entêtes pour la feuille historique
-    "Projet ID", "Projet", "Tâche", "Assigné à", "Email", "Date d’échéance (Projet)", "Date et Heure de Création"
+    "Projet ID", "Assigné à", "Email", "Projet", "Date d’échéance (Projet)", "Date et Heure de Création (Projet)", "Tâche"   
   ],
   LARGEURS_TACHES: [90, 200, 100, 170, 170, 60, 200, 170],    // Largeurs colonnes feuille tâches
   LARGEURS_HTMLTBL: [90, 200, 100, 170, 170, 60, 50, 60, 200, 170], // Largeurs colonnes tableau HTML
-  LARGEURS_HISTORIQUE: [90, 200, 200, 100, 170, 170, 200],    // Largeurs colonnes feuille historique
+  LARGEURS_HISTORIQUE: [90, 100, 170, 200, 170, 200, 200],    // Largeurs colonnes feuille historique
   UI_MENU_LABELS: {    // Labels du menu UI personnalisé
     MENU: "📋 Menu",
     SYNC_RAPPELS: "⏳ Synchroniser + Rappels",
@@ -222,7 +222,7 @@ function syncEtRappels() {
     // Envoie les emails de rappel, jusqu'au maximum configuré
     emails.slice(0, CONFIG.MAX_EMAILS).forEach(e => {
       try {
-        let message = `Bonjour ${e.assigne},\nVotre tâche “${e.tache}” est prévue pour le ${new Date(e.date).toLocaleDateString()}.`;
+        let message = `Bonjour ${e.assigne},\nVotre projet “${e.tache}” est dû le ${new Date(e.date).toLocaleDateString()}.`;
         if (e.tempsDepasse) {
           message += `\n⚠️ Attention : le temps d’échéance de cette tâche est déjà dépassé.`;
         }
@@ -410,75 +410,90 @@ function enregistrerProjetsEtTaches() {
   const donneesSource = feuilleSource.getDataRange().getValues();
   if (donneesSource.length < 2) return;
 
-  // Vérifie ou crée la feuille historique
   const feuilleHistorique = verifierOuCreerFeuilleHistorique();
   const donneesHistorique = feuilleHistorique.getDataRange().getValues();
   const timeZone = Session.getScriptTimeZone();
   const horodatageActuel = Utilities.formatDate(new Date(), timeZone, "dd-MM-yyyy HH:mm");
 
-  // Création d'un dictionnaire des projets+tâches actuels dans la feuille tâches
+  // --- Construire dictionnaire des projets dans Tâches ---
   const projetsSource = {};
   for (let i = 1; i < donneesSource.length; i++) {
     const ligne = donneesSource[i];
-    const [projetID, projet, assigneA, email, dateProjet, , tache] = ligne;
-    if (!projetID || !projet || !tache || !email || !dateProjet) continue;
+    const [projetID, projet, assigneA, email, dateProjet, statut, tache] = ligne;
+    if (!projetID || !projet) continue;
 
     const dateProjetFormatee = dateProjet instanceof Date
       ? Utilities.formatDate(dateProjet, timeZone, "yyyy-MM-dd")
       : dateProjet;
 
-    const cleComposite = `${projetID}||${projet}||${tache}`;
-
-    projetsSource[cleComposite] = [
-      projetID,
-      projet,
-      tache,
-      assigneA,
-      email,
-      dateProjetFormatee,
-      horodatageActuel  // Date et heure de synchronisation actuelle (modifiée plus bas si besoin)
-    ];
+    const cleComposite = `${projetID}||${projet}`;
+    projetsSource[cleComposite] = { valeurs: [projetID, assigneA, email, projet, dateProjetFormatee, horodatageActuel, tache], statut };
   }
 
-  // Création d'un dictionnaire des projets+tâches existants dans la feuille historique
+  // --- Construire dictionnaire des projets dans Historique ---
   const projetsHistorique = {};
   for (let i = 1; i < donneesHistorique.length; i++) {
     const ligne = donneesHistorique[i];
-    const [projetIDHist, projetHist, tacheHist, , , , dateCreation] = ligne;
-    if (!projetIDHist || !projetHist || !tacheHist) continue;
+    const [projetIDHist, assigneHist, emailHist, projetHist, dateProjetHist, dateCreationHist, tacheHist] = ligne;
+    if (!projetIDHist || !projetHist) continue;
 
-    const cleComposite = `${projetIDHist}||${projetHist}||${tacheHist}`;
-    projetsHistorique[cleComposite] = { index: i + 1, dateCreation };
+    const cleComposite = `${projetIDHist}||${projetHist}`;
+    projetsHistorique[cleComposite] = { index: i + 1, dateCreation: dateCreationHist };
   }
 
-  // Recherche des lignes à supprimer dans historique car plus dans tâches
-  let lignesASupprimer = [];
-  Object.entries(projetsHistorique).forEach(([cle, info]) => {
-    if (!projetsSource.hasOwnProperty(cle)) {
-      lignesASupprimer.push(info.index);
-    }
-  });
+  // --- Supprimer projets disparus ---
+  const lignesASupprimer = Object.entries(projetsHistorique)
+    .filter(([cle]) => !projetsSource.hasOwnProperty(cle))
+    .map(([_, info]) => info.index)
+    .sort((a, b) => b - a);
+  lignesASupprimer.forEach(index => feuilleHistorique.deleteRow(index));
 
-  // Mise à jour ou ajout des lignes dans la feuille historique
-  Object.entries(projetsSource).forEach(([cle, valeurs]) => {
+  // --- Mettre à jour ou ajouter ---
+  const aFaireLignes = [];
+  const enCoursLignes = [];
+
+  Object.entries(projetsSource).forEach(([cle, obj], idx) => {
+    const { valeurs, statut } = obj;
+
     if (projetsHistorique.hasOwnProperty(cle)) {
       const ligneIndex = projetsHistorique[cle].index;
-      const ancienneDate = projetsHistorique[cle].dateCreation;
+      let ancienneDate = projetsHistorique[cle].dateCreation;
 
-      // Conserve la date de création historique (ne modifie pas à chaque sync)
-      valeurs[6] = ancienneDate;
+      // Si ancienneDate est "~~~" ou vide, utiliser horodatage actuel
+      if (!ancienneDate || ancienneDate === "~~~") {
+        ancienneDate = horodatageActuel;
+      }
+
+      if (statut === "À faire") {
+        valeurs[5] = "~~~";       // Affichage
+        aFaireLignes.push(ligneIndex);
+      } else if (statut === "En cours") {
+        valeurs[5] = ancienneDate; // Restaurer vraie date
+        enCoursLignes.push(ligneIndex);
+      } else { // Terminé
+        valeurs[5] = ancienneDate;
+      }
 
       feuilleHistorique.getRange(ligneIndex, 1, 1, valeurs.length).setValues([valeurs]);
+
     } else {
-      // Nouvelle entrée : ajout à la fin
+      // Nouveau projet
       feuilleHistorique.appendRow(valeurs);
+      const lastRow = feuilleHistorique.getLastRow();
+
+      if (statut === "À faire") {
+        feuilleHistorique.getRange(lastRow, 6).setValue("~~~");
+        aFaireLignes.push(lastRow);
+      } else if (statut === "En cours") {
+        feuilleHistorique.getRange(lastRow, 6).setValue(horodatageActuel);
+        enCoursLignes.push(lastRow);
+      }
     }
   });
 
-  // Supprime les lignes qui ne sont plus présentes dans la source
-  lignesASupprimer.sort((a, b) => b - a).forEach(index => {
-    feuilleHistorique.deleteRow(index);
-  });
+  // --- Appliquer alignement en bloc ---
+  aFaireLignes.forEach(row => feuilleHistorique.getRange(row, 6).setHorizontalAlignment("right"));
+  enCoursLignes.forEach(row => feuilleHistorique.getRange(row, 6).setHorizontalAlignment("center"));
 }
 
 /*************** VERIFICATION / CREATION FEUILLE HISTORIQUE ***************/
